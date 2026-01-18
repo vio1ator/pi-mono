@@ -24,7 +24,7 @@ import type {
 } from "@mariozechner/pi-agent-core";
 import type { AssistantMessage, ImageContent, Message, Model, TextContent } from "@mariozechner/pi-ai";
 import { isContextOverflow, modelsAreEqual, supportsXhigh } from "@mariozechner/pi-ai";
-import { getAuthPath } from "../config.js";
+import { getAuthPath, getMemoryDbPath } from "../config.js";
 import { theme } from "../modes/interactive/theme/theme.js";
 import { stripFrontmatter } from "../utils/frontmatter.js";
 import { type BashResult, executeBash as executeBashCommand, executeBashWithOperations } from "./bash-executor.js";
@@ -52,6 +52,8 @@ import type {
 	TurnEndEvent,
 	TurnStartEvent,
 } from "./extensions/index.js";
+import type { MemoryBlock, MemoryManager } from "./memory/index.js";
+import { compileMemory, createMemoryTools } from "./memory/index.js";
 import type { BashExecutionMessage, CustomMessage } from "./messages.js";
 import type { ModelRegistry } from "./model-registry.js";
 import { expandPromptTemplate, type PromptTemplate } from "./prompt-templates.js";
@@ -102,6 +104,8 @@ export interface AgentSessionConfig {
 	toolRegistry?: Map<string, AgentTool>;
 	/** Function to rebuild system prompt when tools change */
 	rebuildSystemPrompt?: (toolNames: string[]) => string;
+	/** Memory manager for persistent memory */
+	memoryManager?: MemoryManager;
 }
 
 /** Options for AgentSession.prompt() */
@@ -213,6 +217,9 @@ export class AgentSession {
 	// Base system prompt (without extension appends) - used to apply fresh appends each turn
 	private _baseSystemPrompt: string;
 
+	// Memory manager for persistent memory blocks
+	private _memoryManager?: MemoryManager;
+
 	constructor(config: AgentSessionConfig) {
 		this.agent = config.agent;
 		this.sessionManager = config.sessionManager;
@@ -227,10 +234,68 @@ export class AgentSession {
 		this._toolRegistry = config.toolRegistry ?? new Map();
 		this._rebuildSystemPrompt = config.rebuildSystemPrompt;
 		this._baseSystemPrompt = config.agent.state.systemPrompt;
+		this._memoryManager = config.memoryManager;
+
+		// Initialize memory if enabled
+		if (this._memoryManager) {
+			this._initializeMemory();
+		}
 
 		// Always subscribe to agent events for internal handling
 		// (session persistence, extensions, auto-compaction, retry logic)
 		this._unsubscribeAgent = this.agent.subscribe(this._handleAgentEvent);
+	}
+
+	/**
+	 * Initialize memory system
+	 * - Create default blocks if needed
+	 * - Register memory tools (if not already registered)
+	 * - Update system prompt with memory
+	 */
+	private _initializeMemory(): void {
+		if (!this._memoryManager) return;
+
+		// Load existing memory
+		const memory = this._memoryManager.load();
+
+		// Create default blocks if none exist
+		if (memory.blocks.length === 0) {
+			const defaultBlocks = this.settingsManager.getMemoryDefaultBlocks();
+			for (const block of defaultBlocks) {
+				this._memoryManager.createBlock(block);
+			}
+		}
+
+		// Register memory tools if not already registered
+		// (Tools may have been registered in sdk.ts via createAllTools)
+		const memoryTools = createMemoryTools(this._memoryManager);
+		for (const tool of memoryTools) {
+			if (!this._toolRegistry.has(tool.name)) {
+				this._toolRegistry.set(tool.name, tool);
+			}
+		}
+
+		// Update system prompt to include memory
+		this._updateSystemPromptWithMemory();
+	}
+
+	/**
+	 * Update system prompt with compiled memory
+	 */
+	private _updateSystemPromptWithMemory(): void {
+		if (!this._memoryManager || !this.settingsManager.getMemoryEnabled()) {
+			return;
+		}
+
+		const blocks = this._memoryManager.getBlocks();
+		const memoryString = compileMemory(blocks);
+
+		// Append memory to base system prompt
+		if (memoryString) {
+			this.agent.setSystemPrompt(`${this._baseSystemPrompt}\n\n${memoryString}`);
+		} else {
+			this.agent.setSystemPrompt(this._baseSystemPrompt);
+		}
 	}
 
 	/** Model registry for API key resolution and model discovery */

@@ -23,7 +23,7 @@
 import { Agent, type AgentMessage, type AgentTool, type ThinkingLevel } from "@mariozechner/pi-agent-core";
 import type { Message, Model } from "@mariozechner/pi-ai";
 import { join } from "path";
-import { getAgentDir } from "../config.js";
+import { getAgentDir, getMemoryDbPath } from "../config.js";
 import { AgentSession } from "./agent-session.js";
 import { AuthStorage } from "./auth-storage.js";
 import { createEventBus, type EventBus } from "./event-bus.js";
@@ -38,6 +38,7 @@ import {
 	wrapRegisteredTools,
 	wrapToolsWithExtensions,
 } from "./extensions/index.js";
+import { MemoryManager } from "./memory/index.js";
 import { convertToLlm } from "./messages.js";
 import { ModelRegistry } from "./model-registry.js";
 import { loadPromptTemplates as loadPromptTemplatesInternal, type PromptTemplate } from "./prompt-templates.js";
@@ -439,13 +440,26 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 
 	const autoResizeImages = settingsManager.getImageAutoResize();
 	const shellCommandPrefix = settingsManager.getShellCommandPrefix();
+
+	// Create memory manager if enabled
+	let memoryManager: MemoryManager | undefined;
+	if (settingsManager.getMemoryEnabled()) {
+		const memoryDbPath = getMemoryDbPath();
+		const sessionId = sessionManager.getSessionId();
+		memoryManager = new MemoryManager(memoryDbPath, sessionId);
+	}
+
 	// Create ALL built-in tools for the registry (extensions can enable any of them)
 	const allBuiltInToolsMap = createAllTools(cwd, {
 		read: { autoResizeImages },
 		bash: { commandPrefix: shellCommandPrefix },
+		memoryManager,
 	});
 	// Determine initially active built-in tools (default: read, bash, edit, write)
 	const defaultActiveToolNames: ToolName[] = ["read", "bash", "edit", "write"];
+	if (memoryManager) {
+		defaultActiveToolNames.push("memory_list", "memory_append", "memory_replace");
+	}
 	const initialActiveToolNames: ToolName[] = options.tools
 		? options.tools.map((t) => t.name).filter((n): n is ToolName => n in allBuiltInToolsMap)
 		: defaultActiveToolNames;
@@ -672,6 +686,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		modelRegistry,
 		toolRegistry: wrappedToolRegistry ?? toolRegistry,
 		rebuildSystemPrompt,
+		memoryManager,
 	});
 	time("createAgentSession");
 

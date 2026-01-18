@@ -29,6 +29,8 @@ export {
 export { createWriteTool, type WriteOperations, type WriteToolOptions, writeTool } from "./write.js";
 
 import type { AgentTool } from "@mariozechner/pi-agent-core";
+import type { MemoryManager } from "../memory/index.js";
+import { createMemoryTools } from "../memory/tools.js";
 import { type BashToolOptions, bashTool, createBashTool } from "./bash.js";
 import { createEditTool, editTool } from "./edit.js";
 import { createFindTool, findTool } from "./find.js";
@@ -57,13 +59,18 @@ export const allTools = {
 	ls: lsTool,
 };
 
-export type ToolName = keyof typeof allTools;
+// Static tool map for CLI argument parsing (memory tools are dynamic, not selectable via --tools flag)
+export const staticTools = allTools;
+
+export type ToolName = keyof typeof allTools | "memory_list" | "memory_append" | "memory_replace";
 
 export interface ToolsOptions {
 	/** Options for the read tool */
 	read?: ReadToolOptions;
 	/** Options for the bash tool */
 	bash?: BashToolOptions;
+	/** Optional memory manager for adding memory tools */
+	memoryManager?: MemoryManager;
 }
 
 /**
@@ -89,7 +96,7 @@ export function createReadOnlyTools(cwd: string, options?: ToolsOptions): Tool[]
  * Create all tools configured for a specific working directory.
  */
 export function createAllTools(cwd: string, options?: ToolsOptions): Record<ToolName, Tool> {
-	return {
+	const tools: Record<string, Tool> = {
 		read: createReadTool(cwd, options?.read),
 		bash: createBashTool(cwd, options?.bash),
 		edit: createEditTool(cwd),
@@ -98,4 +105,14 @@ export function createAllTools(cwd: string, options?: ToolsOptions): Record<Tool
 		find: createFindTool(cwd),
 		ls: createLsTool(cwd),
 	};
+
+	// Add memory tools if memory manager is provided
+	if (options?.memoryManager) {
+		const memoryTools = createMemoryTools(options.memoryManager);
+		for (const tool of memoryTools) {
+			tools[tool.name] = tool;
+		}
+	}
+
+	return tools as Record<ToolName, Tool>;
 }

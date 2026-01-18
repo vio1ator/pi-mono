@@ -19,6 +19,9 @@ const toolDescriptions: Record<ToolName, string> = {
 	grep: "Search file contents for patterns (respects .gitignore)",
 	find: "Find files by glob pattern (respects .gitignore)",
 	ls: "List directory contents",
+	memory_list: "List all memory blocks and their contents",
+	memory_append: "Append text to a memory block (creates if needed)",
+	memory_replace: "Replace entire content of a memory block",
 };
 
 /** Resolve input as file path or literal string */
@@ -256,6 +259,34 @@ export function buildSystemPrompt(options: BuildSystemPromptOptions = {}): strin
 		guidelinesList.push(
 			"When summarizing your actions, output plain text directly - do NOT use cat or bash to display what you did",
 		);
+	}
+
+	// Memory tool guidelines
+	const hasMemoryList = tools.includes("memory_list");
+	const hasMemoryAppend = tools.includes("memory_append");
+	const hasMemoryReplace = tools.includes("memory_replace");
+
+	if (hasMemoryList || hasMemoryAppend || hasMemoryReplace) {
+		// Memory management
+		if (hasMemoryList) {
+			guidelinesList.push("Use memory_list to review current project context and what information is persisted");
+		}
+		if (hasMemoryAppend) {
+			guidelinesList.push(
+				"Use memory_append to persist important information across sessions: project context, technical decisions, user preferences, ongoing tasks",
+			);
+			guidelinesList.push("Project block: Tech stack, architecture, patterns, constraints");
+			guidelinesList.push("Tasks block: TODOs, work items, follow-up actions");
+		}
+		if (hasMemoryReplace) {
+			guidelinesList.push(
+				"Use memory_replace sparingly - only for complete updates to a block (use memory_append for additions)",
+			);
+		}
+
+		// When to remember
+		guidelinesList.push("Remember information that would be useful in future conversations about this project");
+		guidelinesList.push("Memory persists across sessions and is automatically included in your context");
 	}
 
 	// Always include these

@@ -47,6 +47,22 @@ export interface ThinkingBudgetsSettings {
 	high?: number;
 }
 
+export interface CreateMemoryBlock {
+	label: string;
+	value?: string;
+	description?: string;
+	charLimit?: number;
+	readOnly?: boolean;
+	hidden?: boolean;
+	metadata?: Record<string, unknown>;
+}
+
+export interface MemoryConfig {
+	enabled?: boolean; // default: true
+	defaultBlocks?: CreateMemoryBlock[]; // default blocks for new sessions
+	maxBlocks?: number; // default: 10
+}
+
 export interface Settings {
 	lastChangelogVersion?: string;
 	defaultProvider?: string;
@@ -72,6 +88,7 @@ export interface Settings {
 	thinkingBudgets?: ThinkingBudgetsSettings; // Custom token budgets for thinking levels
 	editorPaddingX?: number; // Horizontal padding for input editor (default: 0)
 	showHardwareCursor?: boolean; // Show terminal cursor while still positioning it for IME
+	memory?: MemoryConfig; // Persistent memory configuration
 }
 
 /** Deep merge settings: project/overrides take precedence, nested objects merge recursively */
@@ -498,6 +515,63 @@ export class SettingsManager {
 
 	setEditorPaddingX(padding: number): void {
 		this.globalSettings.editorPaddingX = Math.max(0, Math.min(3, Math.floor(padding)));
+		this.save();
+	}
+
+	getMemoryEnabled(): boolean {
+		return this.settings.memory?.enabled ?? true;
+	}
+
+	setMemoryEnabled(enabled: boolean): void {
+		if (!this.globalSettings.memory) {
+			this.globalSettings.memory = {};
+		}
+		this.globalSettings.memory.enabled = enabled;
+		this.save();
+	}
+
+	getMemoryDefaultBlocks(): CreateMemoryBlock[] {
+		const defaults: CreateMemoryBlock[] = [
+			{
+				label: "persona",
+				value: "You are an AI coding assistant with expertise in software development.",
+				description: "Your role and capabilities",
+				charLimit: 2000,
+				readOnly: true,
+			},
+			{
+				label: "project",
+				value: "",
+				description: "Information about the current project",
+				charLimit: 4000,
+			},
+			{
+				label: "tasks",
+				value: "",
+				description: "Tasks and action items for the project",
+				charLimit: 4000,
+			},
+		];
+		return this.settings.memory?.defaultBlocks ?? defaults;
+	}
+
+	setMemoryDefaultBlocks(blocks: CreateMemoryBlock[]): void {
+		if (!this.globalSettings.memory) {
+			this.globalSettings.memory = {};
+		}
+		this.globalSettings.memory.defaultBlocks = blocks;
+		this.save();
+	}
+
+	getMemoryMaxBlocks(): number {
+		return this.settings.memory?.maxBlocks ?? 10;
+	}
+
+	setMemoryMaxBlocks(max: number): void {
+		if (!this.globalSettings.memory) {
+			this.globalSettings.memory = {};
+		}
+		this.globalSettings.memory.maxBlocks = Math.max(1, max);
 		this.save();
 	}
 }

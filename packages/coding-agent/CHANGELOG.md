@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Persistent Memory System**: Letta-inspired memory blocks with SQLite persistence at `~/.pi/agent/memory.db` ([#815](https://github.com/badlogic/pi-mono/issues/815))
+  - Default memory blocks (`persona`, `project`, `tasks`) created for new sessions
+  - Agent tools for memory management: `memory_list()`, `memory_append()`, `memory_replace()`
+  - Memory automatically compiled and injected into system prompt before each LLM call
+  - Session-scoped memory blocks with configurable character limits and read-only protection
+  - Version history for tracking memory changes
+  - Configurable via `settings.json` with `memory.enabled`, `memory.defaultBlocks`, `memory.maxBlocks`
+
+
 ## [0.49.0] - 2026-01-17
 
 ### Added
